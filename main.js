@@ -85,3 +85,7 @@ function runRemap() {
 function runUnPrecompose() {
     csInterface.evalScript("unPrecompose()");
 }
+
+function runDuplicateUnique() {
+    csInterface.evalScript("duplicateCompUnique()");
+}

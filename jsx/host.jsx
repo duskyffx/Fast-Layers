@@ -240,57 +240,154 @@ function trimByMarkerSource(source) {
 
 function unPrecompose() {
     var comp = isCompActive();
+
     if (!comp) {
-        alert("Выдели таймлинию!");
+        alert("Error: Please select a composition!");
         return;
     }
+
     var sel = comp.selectedLayers;
+
     if (!sel || sel.length === 0) {
-        alert("Выделите прекомпозиции!");
+        alert("Error: Please select precompositions!");
         return;
     }
+
+    function rememberLayerIDs(c) {
+        var ids = {};
+        for (var i = 1; i <= c.numLayers; i++) {
+            try {
+                ids[c.layer(i).id] = true;
+            } catch (e) {}
+        }
+        return ids;
+    }
+
+    function findNewLayer(c, oldIDs) {
+        for (var i = 1; i <= c.numLayers; i++) {
+            try {
+                var l = c.layer(i);
+                if (!oldIDs[l.id]) {
+                    return l;
+                }
+            } catch (e) {}
+        }
+
+        var selected = c.selectedLayers;
+        if (selected && selected.length > 0) {
+            return selected[0];
+        }
+
+        return null;
+    }
+
     app.beginUndoGroup("Un-precompose Final");
+
     var targets = [];
+
     for (var i = 0; i < sel.length; i++) {
         if (sel[i].source instanceof CompItem) {
             targets.push(sel[i]);
         }
     }
+
     if (targets.length === 0) {
         app.endUndoGroup();
-        alert("Среди выделенных слоёв нет прекомпозиций.");
+        alert("Error: None of the selected layers are precompositions.");
         return;
     }
+
     for (var t = targets.length - 1; t >= 0; t--) {
         var precompLayer = targets[t];
+
         try {
             var innerComp = precompLayer.source;
+
             var pStart = precompLayer.startTime;
             var pIn = precompLayer.inPoint;
             var pOut = precompLayer.outPoint;
+
             for (var d = 1; d <= comp.numLayers; d++) {
                 comp.layer(d).selected = false;
             }
+
             for (var j = 1; j <= innerComp.numLayers; j++) {
                 var innerLayer = innerComp.layer(j);
+
+                var oldIDs = rememberLayerIDs(comp);
+
                 innerLayer.copyToComp(comp);
-                var newLayer = comp.layer(1);
+
+                var newLayer = findNewLayer(comp, oldIDs);
+
+                if (!newLayer) {
+                    continue;
+                }
+
                 try {
                     newLayer.moveBefore(precompLayer);
                 } catch (e) {}
+
                 newLayer.startTime += pStart;
+
                 if (newLayer.inPoint < pIn) {
                     newLayer.inPoint = pIn;
                 }
+
                 if (newLayer.outPoint > pOut) {
                     newLayer.outPoint = pOut;
                 }
+
                 newLayer.selected = true;
             }
+
             precompLayer.remove();
+
         } catch (err) {
-            alert("Ошибка при распаковке прекомпа: " + err.toString());
+            alert("An error occurred when unpacking the precomposition '" + precompLayer.name + "': " + err.toString());
         }
     }
+
+    app.endUndoGroup();
+}
+
+function duplicateCompUnique() {
+    var comp = isCompActive();
+    if (!comp) return;
+
+    var sel = comp.selectedLayers;
+    if (sel.length === 0) {
+        alert("Error: Please select a precomposition first!");
+        return;
+    }
+
+    app.beginUndoGroup("Unique Duplicate Above");
+
+    var processed = 0;
+
+    for (var i = 0; i < sel.length; i++) {
+        var layer = sel[i];
+
+        if (layer.source instanceof CompItem) {
+            var originalComp = layer.source;
+            
+            var newComp = originalComp.duplicate();
+            newComp.name = originalComp.name + "_copy";
+            
+            var duplicatedLayer = layer.duplicate();
+            
+            duplicatedLayer.replaceSource(newComp, false);
+            
+            layer.selected = false;
+            duplicatedLayer.selected = true;
+            
+            processed++;
+        }
+    }
+
+    if (processed === 0) {
+        alert("Error: The selected layers are not precompositions!");
+    }
+
     app.endUndoGroup();
 }
