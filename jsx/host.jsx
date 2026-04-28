@@ -260,12 +260,10 @@ function unPrecompose() {
     if (!comp) return alert("Выдели таймлинию!");
 
     var sel = comp.selectedLayers;
-    if (!sel || sel.length === 0) return alert("Выдели прекомпозиции!");
+    if (!sel || sel.length === 0) return alert("Выделите прекомпозиции!");
 
-    app.beginUndoGroup("Un-precompose Precise");
-
-    // 1. Собираем таргеты
     var targets = [];
+
     for (var i = 0; i < sel.length; i++) {
         if (sel[i].source instanceof CompItem) {
             targets.push(sel[i]);
@@ -273,34 +271,57 @@ function unPrecompose() {
     }
 
     if (targets.length === 0) {
-        app.endUndoGroup();
-        return alert("Среди выделенных слоев нет прекомпозиций.");
+        return alert("Среди выделенных слоёв нет прекомпозиций.");
     }
 
-    for (var t = targets.length - 1; t >= 0; t--) {
+    targets.sort(function (a, b) {
+        return b.index - a.index;
+    });
+
+    app.beginUndoGroup("Un-precompose Keep Order");
+
+    for (var t = 0; t < targets.length; t++) {
         var precompLayer = targets[t];
-        
-        try {
-            var innerComp = precompLayer.source;
-            var pStart = precompLayer.startTime;
-            
-            var targetIndex = precompLayer.index;
 
-            for (var d = 1; d <= comp.numLayers; d++) comp.layer(d).selected = false;
+        if (!precompLayer || !(precompLayer.source instanceof CompItem)) {
+            continue;
+        }
 
-            for (var j = innerComp.numLayers; j >= 1; j--) {
-                var innerLayer = innerComp.layer(j);
-                
-                var newLayer = innerLayer.copyToComp(comp);
-                newLayer.moveBefore(comp.layer(targetIndex));
-                newLayer.startTime += pStart;
+        var innerComp = precompLayer.source;
 
-                newLayer.selected = true;
-            }
-            comp.layer(targetIndex + innerComp.numLayers).remove();
+        var pStart = precompLayer.startTime;
+        var pIn = precompLayer.inPoint;
+        var pOut = precompLayer.outPoint;
 
-        } catch (err) {
-            alert("Ошибка в '" + precompLayer.name + "': " + err.toString());
+        for (var d = 1; d <= comp.numLayers; d++) {
+            comp.layer(d).selected = false;
+        }
+
+        var createdLayers = [];
+
+        for (var j = 1; j <= innerComp.numLayers; j++) {
+            var innerLayer = innerComp.layer(j);
+
+            innerLayer.copyToComp(comp);
+
+            var newLayer = comp.layer(1);
+
+            newLayer.moveBefore(precompLayer);
+
+            newLayer.startTime = pStart + innerLayer.startTime;
+            newLayer.inPoint = pStart + innerLayer.inPoint;
+            newLayer.outPoint = pStart + innerLayer.outPoint;
+
+            if (newLayer.inPoint < pIn) newLayer.inPoint = pIn;
+            if (newLayer.outPoint > pOut) newLayer.outPoint = pOut;
+
+            createdLayers.push(newLayer);
+        }
+
+        precompLayer.remove();
+
+        for (var k = 0; k < createdLayers.length; k++) {
+            createdLayers[k].selected = true;
         }
     }
 
