@@ -237,3 +237,60 @@ function trimByMarkerSource(source) {
         if (app.undoGroup && app.undoGroup !== "") app.endUndoGroup();
     }
 }
+
+function unPrecompose() {
+    var comp = isCompActive();
+    if (!comp) {
+        alert("Выдели таймлинию!");
+        return;
+    }
+    var sel = comp.selectedLayers;
+    if (!sel || sel.length === 0) {
+        alert("Выделите прекомпозиции!");
+        return;
+    }
+    app.beginUndoGroup("Un-precompose Final");
+    var targets = [];
+    for (var i = 0; i < sel.length; i++) {
+        if (sel[i].source instanceof CompItem) {
+            targets.push(sel[i]);
+        }
+    }
+    if (targets.length === 0) {
+        app.endUndoGroup();
+        alert("Среди выделенных слоёв нет прекомпозиций.");
+        return;
+    }
+    for (var t = targets.length - 1; t >= 0; t--) {
+        var precompLayer = targets[t];
+        try {
+            var innerComp = precompLayer.source;
+            var pStart = precompLayer.startTime;
+            var pIn = precompLayer.inPoint;
+            var pOut = precompLayer.outPoint;
+            for (var d = 1; d <= comp.numLayers; d++) {
+                comp.layer(d).selected = false;
+            }
+            for (var j = 1; j <= innerComp.numLayers; j++) {
+                var innerLayer = innerComp.layer(j);
+                innerLayer.copyToComp(comp);
+                var newLayer = comp.layer(1);
+                try {
+                    newLayer.moveBefore(precompLayer);
+                } catch (e) {}
+                newLayer.startTime += pStart;
+                if (newLayer.inPoint < pIn) {
+                    newLayer.inPoint = pIn;
+                }
+                if (newLayer.outPoint > pOut) {
+                    newLayer.outPoint = pOut;
+                }
+                newLayer.selected = true;
+            }
+            precompLayer.remove();
+        } catch (err) {
+            alert("Ошибка при распаковке прекомпа: " + err.toString());
+        }
+    }
+    app.endUndoGroup();
+}

@@ -82,7 +82,6 @@ function runRemap() {
     csInterface.evalScript("remapKeys(" + (isNaN(val) ? 1 : val) + ")");
 }
 
-
-function testHost() {
-    csInterface.evalScript("testHost()", function(res) { alert(res); });
+function runUnPrecompose() {
+    csInterface.evalScript("unPrecompose()");
 }
