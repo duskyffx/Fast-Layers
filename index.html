@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="panel">
+        <div class="header">
+            <img class="logo" src="icon.png" alt="Logo">
+            <div class="title">Key Panel</div>
+        </div>
+
+        <div class="card">
+            <div class="info">
+                <div class="name">Null Object</div>
+            </div>
+            <button onclick="runNull(false)">Run</button>
+            <button onclick="runNull(true)" class="secondary">Link</button>
+        </div>
+
+        <div class="card">
+            <div class="info">
+                <div class="name">Solid Layer</div>
+            </div>
+            <div class="settings-toggle" onclick="toggleSettings()">⚙️</div>
+            <input type="color" id="solidColor" value="#00e5ff">
+            <button onclick="runSolid(false)">Gen</button>
+            <button onclick="runSolid(true)" class="secondary">Bind</button>
+        </div>
+
+        <div class="card">
+            <div class="info">
+                <div class="name">Adjustment</div>
+            </div>
+            <button onclick="runAdj(false)">Init</button>
+            <button onclick="runAdj(true)" class="secondary">Chain</button>
+        </div>
+
+        <div class="card">
+            <div class="info">
+                <div class="name">Camera</div>
+            </div>
+            <button onclick="runCam()" class="wide">Capture</button>
+        </div>
+
+        <div class="card">
+            <div class="info">
+                <div class="name">Marker Split</div>
+                <div class="desc">split layers by markers</div>
+            </div>
+            <select id="markerSource" style="width: 80px;"></select>
+                <button onclick="refreshMarkerSourcesBtn()">🔄</button>
+                <button onclick="trimByMarkersBtn()">Trim</button>
+        </div>
+
+        <div class="tools">
+            <input type="number" id="remapStep" value="1" placeholder="step">
+            <button onclick="runRemap()">Remap Keys</button>
+        </div>
+
+        
+    </div>
+
+    <div id="modalOverlay" class="modal-overlay">
+        <div class="modal-window">
+            <div class="modal-header">
+                <span>Settings</span>
+                <div class="close-btn" onclick="toggleSettings()">×</div>
+            </div>
+            <div class="modal-body">
+                <div class="modal-row">
+                    <label>Width</label>
+                    <input type="number" id="solidW" placeholder="Comp">
+                </div>
+                <div class="modal-row">
+                    <label>Height</label>
+                    <input type="number" id="solidH" placeholder="Comp">
+                </div>
+                <div class="modal-hint">Leave empty for Comp Size</div>
+            </div>
+            <button class="modal-save" onclick="toggleSettings()">Apply</button>
+        </div>
+    </div>
+
+    <script src="CSInterface.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
