@@ -46,30 +46,47 @@ function createNull(parentFlag) {
 
 function createSolid(parentFlag, hex, w, h) {
     var comp = isCompActive();
-    if (!comp) return alert("Please click on the timeline first!");
-    var finalW = (w && w > 0) ? w : comp.width;
-    var finalH = (h && h > 0) ? h : comp.height;
+    if (!comp) return alert("Click on the timeline first!");
+
     var color = hexToRGB(hex);
     var sel = comp.selectedLayers;
     var created = [];
-    var targets = [];
-    for (var i = 0; i < sel.length; i++) targets.push(sel[i]);
+    
     app.beginUndoGroup("Create Solid");
-    if (targets.length === 0) {
-        created.push(comp.layers.addSolid(color, "Solid", finalW, finalH, 1));
+
+    if (sel.length === 0) {
+        var finalW = (w && w > 0) ? w : comp.width;
+        var finalH = (h && h > 0) ? h : comp.height;
+        var s = comp.layers.addSolid(color, "Solid", finalW, finalH, 1);
+        created.push(s);
     } else {
-        for (var i = 0; i < targets.length; i++) {
+        for (var i = 0; i < sel.length; i++) {
+            var target = sel[i];
+            
+            var finalW = (w && w > 0) ? w : (target.width || comp.width);
+            var finalH = (h && h > 0) ? h : (target.height || comp.height);
+
             var s = comp.layers.addSolid(color, "Solid", finalW, finalH, 1);
-            s.moveBefore(targets[i]);
-            s.inPoint = targets[i].inPoint;
-            s.outPoint = targets[i].outPoint;
-            if (parentFlag) targets[i].parent = s;
+            
+            s.moveBefore(target);
+            
+            s.startTime = target.startTime; 
+            s.inPoint = target.inPoint;
+            s.outPoint = target.outPoint;
+
+            if (parentFlag) {
+                try { target.parent = s; } catch(e) {}
+            }
             created.push(s);
         }
     }
-    selectOnlyCreated(comp, created);
+    if (typeof selectOnlyCreated === "function") {
+        selectOnlyCreated(comp, created);
+    }
+    
     app.endUndoGroup();
 }
+
 function createAdjustment(parentFlag) {
     var comp = isCompActive();
     if (!comp) return alert("Please click on the timeline first!");
@@ -240,51 +257,15 @@ function trimByMarkerSource(source) {
 
 function unPrecompose() {
     var comp = isCompActive();
-
-    if (!comp) {
-        alert("Error: Please select a composition!");
-        return;
-    }
+    if (!comp) return alert("Выдели таймлинию!");
 
     var sel = comp.selectedLayers;
+    if (!sel || sel.length === 0) return alert("Выдели прекомпозиции!");
 
-    if (!sel || sel.length === 0) {
-        alert("Error: Please select precompositions!");
-        return;
-    }
+    app.beginUndoGroup("Un-precompose Precise");
 
-    function rememberLayerIDs(c) {
-        var ids = {};
-        for (var i = 1; i <= c.numLayers; i++) {
-            try {
-                ids[c.layer(i).id] = true;
-            } catch (e) {}
-        }
-        return ids;
-    }
-
-    function findNewLayer(c, oldIDs) {
-        for (var i = 1; i <= c.numLayers; i++) {
-            try {
-                var l = c.layer(i);
-                if (!oldIDs[l.id]) {
-                    return l;
-                }
-            } catch (e) {}
-        }
-
-        var selected = c.selectedLayers;
-        if (selected && selected.length > 0) {
-            return selected[0];
-        }
-
-        return null;
-    }
-
-    app.beginUndoGroup("Un-precompose Final");
-
+    // 1. Собираем таргеты
     var targets = [];
-
     for (var i = 0; i < sel.length; i++) {
         if (sel[i].source instanceof CompItem) {
             targets.push(sel[i]);
@@ -293,58 +274,33 @@ function unPrecompose() {
 
     if (targets.length === 0) {
         app.endUndoGroup();
-        alert("Error: None of the selected layers are precompositions.");
-        return;
+        return alert("Среди выделенных слоев нет прекомпозиций.");
     }
 
     for (var t = targets.length - 1; t >= 0; t--) {
         var precompLayer = targets[t];
-
+        
         try {
             var innerComp = precompLayer.source;
-
             var pStart = precompLayer.startTime;
-            var pIn = precompLayer.inPoint;
-            var pOut = precompLayer.outPoint;
+            
+            var targetIndex = precompLayer.index;
 
-            for (var d = 1; d <= comp.numLayers; d++) {
-                comp.layer(d).selected = false;
-            }
+            for (var d = 1; d <= comp.numLayers; d++) comp.layer(d).selected = false;
 
-            for (var j = 1; j <= innerComp.numLayers; j++) {
+            for (var j = innerComp.numLayers; j >= 1; j--) {
                 var innerLayer = innerComp.layer(j);
-
-                var oldIDs = rememberLayerIDs(comp);
-
-                innerLayer.copyToComp(comp);
-
-                var newLayer = findNewLayer(comp, oldIDs);
-
-                if (!newLayer) {
-                    continue;
-                }
-
-                try {
-                    newLayer.moveBefore(precompLayer);
-                } catch (e) {}
-
+                
+                var newLayer = innerLayer.copyToComp(comp);
+                newLayer.moveBefore(comp.layer(targetIndex));
                 newLayer.startTime += pStart;
-
-                if (newLayer.inPoint < pIn) {
-                    newLayer.inPoint = pIn;
-                }
-
-                if (newLayer.outPoint > pOut) {
-                    newLayer.outPoint = pOut;
-                }
 
                 newLayer.selected = true;
             }
-
-            precompLayer.remove();
+            comp.layer(targetIndex + innerComp.numLayers).remove();
 
         } catch (err) {
-            alert("An error occurred when unpacking the precomposition '" + precompLayer.name + "': " + err.toString());
+            alert("Ошибка в '" + precompLayer.name + "': " + err.toString());
         }
     }
 

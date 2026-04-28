@@ -21,15 +21,17 @@ function toggleSettings() {
 function runNull(p) { csInterface.evalScript("createNull(" + p + ")"); }
 
 function runSolid(p) {
-    var col = document.getElementById('solidColor').value;
+    var colInput = document.getElementById('solidColor');
+    var col = colInput.value.replace('#', ''); 
     
     var wInput = document.getElementById('solidW');
     var hInput = document.getElementById('solidH');
     
-    var w = parseInt(wInput.value) || 0;
-    var h = parseInt(hInput.value) || 0;
+    var w = parseFloat(wInput.value) || 0;
+    var h = parseFloat(hInput.value) || 0;
     
     csInterface.evalScript("createSolid(" + p + ", '" + col + "', " + w + ", " + h + ")");
+    
     wInput.value = "";
     hInput.value = "";
 }
