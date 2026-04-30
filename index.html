@@ -11,6 +11,17 @@
             <div class="title">Key Panel</div>
         </div>
 
+        <div id="updateBox" class="update-box" style="display:none;">
+            <div class="update-title">An update has been released</div>
+            <div id="updateVersion" class="update-version"></div>
+            <div id="updateMessage" class="update-message"></div>
+
+        <div class="update-actions">
+            <button id="downloadUpdateBtn">Download</button>
+            <button id="closeUpdateBtn">Later</button>
+        </div>
+    </div>
+
         <div class="card">
             <div class="info">
                 <div class="name">Null Object</div>
@@ -48,6 +59,7 @@
             <div class="info">
                 <div class="name">Precomp Tools</div>
             </div>
+            <button onclick="runBatchPrecomp()">Precompose</button>
             <button onclick="runUnPrecompose()">Extract</button>
             <button onclick="runDuplicateUnique()" class="secondary">Unique Dup</button>
         </div>

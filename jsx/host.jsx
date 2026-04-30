@@ -394,3 +394,98 @@ function duplicateCompUnique() {
 
     app.endUndoGroup();
 }
+
+function batchPrecompose() {
+    var comp = app.project.activeItem;
+    if (!(comp instanceof CompItem)) return alert("Select the active composition!");
+
+    var sel = comp.selectedLayers;
+    if (!sel.length) return alert("Select layers!");
+
+    app.beginUndoGroup("Batch Precompose by Bounds");
+
+    var padding = 0, targets = [];
+
+    for (var i = 0; i < sel.length; i++) {
+        var l = sel[i], r = null;
+
+        try { r = l.sourceRectAtTime(comp.time, false); } catch (e) {}
+
+        var hasRect = r && r.width > 0 && r.height > 0;
+        var w = hasRect ? Math.ceil(r.width) + padding * 2 : (l.source ? l.source.width : 100);
+        var h = hasRect ? Math.ceil(r.height) + padding * 2 : (l.source ? l.source.height : 100);
+
+        targets.push({
+            id: l.id,
+            index: l.index,
+            name: l.name,
+            inP: l.inPoint,
+            outP: l.outPoint,
+            start: l.startTime,
+            pos: l.position.value,
+            scale: l.scale.value,
+            opacity: l.opacity.value,
+            rot: l.property("Rotation") ? l.property("Rotation").value : 0,
+            w: Math.max(1, w),
+            h: Math.max(1, h),
+            left: hasRect ? r.left - padding : 0,
+            top: hasRect ? r.top - padding : 0
+        });
+    }
+
+    targets.sort(function (a, b) { return b.index - a.index; });
+
+    for (var j = 0; j < targets.length; j++) {
+        var d = targets[j], layer = null;
+
+        for (var n = 1; n <= comp.numLayers; n++) {
+            if (comp.layer(n).id === d.id) {
+                layer = comp.layer(n);
+                break;
+            }
+        }
+
+        if (!layer) continue;
+
+        try {
+            var inner = comp.layers.precompose([layer.index], d.name + "_precomp", true);
+            inner.width = d.w;
+            inner.height = d.h;
+            inner.duration = d.outP - d.inP;
+
+            var pre = null;
+            for (var p = 1; p <= comp.numLayers; p++) {
+                if (comp.layer(p).source === inner) {
+                    pre = comp.layer(p);
+                    break;
+                }
+            }
+
+            if (!pre) continue;
+
+            var il = inner.layer(1);
+
+            il.startTime = d.start - d.inP;
+            il.inPoint = 0;
+            il.outPoint = inner.duration;
+            il.anchorPoint.setValue([0, 0]);
+            il.position.setValue([-d.left, -d.top]);
+            il.scale.setValue([100, 100]);
+            if (il.property("Rotation")) il.property("Rotation").setValue(0);
+
+            pre.startTime = d.inP;
+            pre.inPoint = d.inP;
+            pre.outPoint = d.outP;
+            pre.position.setValue(d.pos);
+            pre.scale.setValue(d.scale);
+            pre.opacity.setValue(d.opacity);
+            pre.anchorPoint.setValue([d.w / 2, d.h / 2]);
+            if (pre.property("Rotation")) pre.property("Rotation").setValue(d.rot);
+
+        } catch (e) {
+            alert("Error on layer: " + d.name + "\n" + e.toString());
+        }
+    }
+
+    app.endUndoGroup();
+}

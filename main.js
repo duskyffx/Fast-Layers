@@ -91,3 +91,40 @@ function runUnPrecompose() {
 function runDuplicateUnique() {
     csInterface.evalScript("duplicateCompUnique()");
 }
+
+function runBatchPrecomp() {
+    csInterface.evalScript("batchPrecompose()");
+}
+
+var CURRENT_VERSION = "1.0.0";
+
+document.addEventListener("DOMContentLoaded", function () {
+
+    fetch("https://github.com/duskyffx/Fast-Layers/version.json")
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+
+            if (data.version !== CURRENT_VERSION) {
+
+                document.getElementById("updateVersion").innerText =
+                    "New version: " + data.version;
+
+                document.getElementById("updateMessage").innerText =
+                    data.message;
+
+                document.getElementById("updateBox").style.display = "block";
+
+                document.getElementById("downloadUpdateBtn").onclick = function () {
+                    window.open(data.url);
+                };
+            }
+
+        })
+        .catch(function () {
+        });
+
+    document.getElementById("closeUpdateBtn").onclick = function () {
+        document.getElementById("updateBox").style.display = "none";
+    };
+
+});
