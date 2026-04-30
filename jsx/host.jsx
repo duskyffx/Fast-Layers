@@ -164,25 +164,51 @@ function createCamera() {
 function remapKeys(step) {
     var comp = isCompActive();
     if (!comp) return;
-    
+
     var props = comp.selectedProperties;
-    if (props.length === 0) return alert("Please select keys!");
-    
-    app.beginUndoGroup("Remap");
-    for (var i = 0; i < props.length; i++) {
-        var p = props[i];
-        if (p.numKeys > 1) {
-            var t = [], v = [];
-            for (var k = 1; k <= p.numKeys; k++) { 
-                t.push(p.keyTime(k)); 
-                v.push(p.keyValue(k)); 
-            }
-            for (var d = p.numKeys; d >= 1; d--) p.removeKey(d);
-            for (var n = 0; n < v.length; n++) {
-                p.setValueAtTime(t[0] + (n * step * comp.frameDuration), v[n]);
-            }
+    if (!props || props.length === 0) return alert("Select properties with keys!");
+
+    app.beginUndoGroup("Remap Selected Keys");
+
+    for (var p = 0; p < props.length; p++) {
+        var prop = props[p];
+
+        if (!(prop instanceof Property) || prop.numKeys < 2) continue;
+
+        var selectedKeys = prop.selectedKeys;
+        if (!selectedKeys || selectedKeys.length === 0) continue;
+
+        selectedKeys.sort(function(a, b) { return a - b; });
+
+        var fd = comp.frameDuration;
+        var t1 = prop.keyTime(selectedKeys[0]); 
+        var startFrame = Math.round(t1 / fd);
+        
+        var keysData = [];
+        for (var k = 0; k < selectedKeys.length; k++) {
+            keysData.push({
+                value: prop.keyValue(selectedKeys[k])
+            });
         }
+
+        for (var kk = selectedKeys.length - 1; kk >= 1; kk--) {
+            prop.removeKey(selectedKeys[kk]);
+        }
+
+        for (var i = 1; i < keysData.length; i++) {
+            var newFrame = startFrame + (i * step);
+            var newTime = newFrame * fd;
+
+            var newIdx = prop.addKey(newTime);
+            prop.setValueAtKey(newIdx, keysData[i].value);
+            
+            prop.setInterpolationTypeAtKey(newIdx, KeyframeInterpolationType.LINEAR, KeyframeInterpolationType.LINEAR);
+        }
+        
+        var firstIdx = prop.nearestKeyIndex(t1);
+        prop.setInterpolationTypeAtKey(firstIdx, KeyframeInterpolationType.LINEAR, KeyframeInterpolationType.LINEAR);
     }
+
     app.endUndoGroup();
 }
 
@@ -257,10 +283,10 @@ function trimByMarkerSource(source) {
 
 function unPrecompose() {
     var comp = isCompActive();
-    if (!comp) return alert("Выдели таймлинию!");
+    if (!comp) return alert("Highlight the timeline!");
 
     var sel = comp.selectedLayers;
-    if (!sel || sel.length === 0) return alert("Выделите прекомпозиции!");
+    if (!sel || sel.length === 0) return alert("Please select precompositions!");
 
     var targets = [];
 
@@ -271,7 +297,7 @@ function unPrecompose() {
     }
 
     if (targets.length === 0) {
-        return alert("Среди выделенных слоёв нет прекомпозиций.");
+        return alert("Among the selected layers, there are no precompositions.");
     }
 
     targets.sort(function (a, b) {
