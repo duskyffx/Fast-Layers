@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
-  "message": "Fixed precompose, remap, and layer creation bugs.",
+  "version": "1.0.1",
+  "message": "Fixed precompose with keyframes.",
   "url": "https://github.com/duskyffx/Fast-Layers/archive/refs/heads/main.zip"
 }

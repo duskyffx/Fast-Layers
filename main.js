@@ -96,7 +96,7 @@ function runBatchPrecomp() {
     csInterface.evalScript("batchPrecompose()");
 }
 
-var CURRENT_VERSION = "1.0.0";
+var CURRENT_VERSION = "1.0.1";
 
 document.addEventListener("DOMContentLoaded", function () {
 
@@ -122,7 +122,6 @@ document.addEventListener("DOMContentLoaded", function () {
                     }
                 };
             }
-
         })
         .catch(function () {
         });

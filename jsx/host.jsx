@@ -395,6 +395,13 @@ function duplicateCompUnique() {
     app.endUndoGroup();
 }
 
+function setSafe(prop, value) {
+    if (!prop) return;
+    if (prop.numKeys === 0) {
+        prop.setValue(value);
+    }
+}
+
 function batchPrecompose() {
     var comp = app.project.activeItem;
     if (!(comp instanceof CompItem)) return alert("Select the active composition!");
@@ -404,16 +411,31 @@ function batchPrecompose() {
 
     app.beginUndoGroup("Batch Precompose by Bounds");
 
-    var padding = 0, targets = [];
+    var targets = [];
+    var padding = 0;
 
     for (var i = 0; i < sel.length; i++) {
-        var l = sel[i], r = null;
-
+        var l = sel[i];
+        var r = null;
         try { r = l.sourceRectAtTime(comp.time, false); } catch (e) {}
 
-        var hasRect = r && r.width > 0 && r.height > 0;
-        var w = hasRect ? Math.ceil(r.width) + padding * 2 : (l.source ? l.source.width : 100);
-        var h = hasRect ? Math.ceil(r.height) + padding * 2 : (l.source ? l.source.height : 100);
+        var isNull = l.nullLayer;
+        var hasParent = l.parent !== null;
+        var fullSize = isNull || hasParent;
+
+        var w = comp.width, h = comp.height, left = 0, top = 0;
+
+        if (!fullSize) {
+            if (r && r.width > 0) {
+                w = Math.ceil(r.width) + padding * 2;
+                h = Math.ceil(r.height) + padding * 2;
+                left = r.left - padding;
+                top = r.top - padding;
+            } else if (l.source) {
+                w = l.source.width;
+                h = l.source.height;
+            }
+        }
 
         targets.push({
             id: l.id,
@@ -422,70 +444,54 @@ function batchPrecompose() {
             inP: l.inPoint,
             outP: l.outPoint,
             start: l.startTime,
-            pos: l.position.value,
-            scale: l.scale.value,
-            opacity: l.opacity.value,
+            pos: l.property("Position").value,
+            scale: l.property("Scale").value,
+            anchor: l.property("Anchor Point").value,
             rot: l.property("Rotation") ? l.property("Rotation").value : 0,
-            w: Math.max(1, w),
-            h: Math.max(1, h),
-            left: hasRect ? r.left - padding : 0,
-            top: hasRect ? r.top - padding : 0
+            parent: l.parent,
+            isNull: isNull,
+            fullSize: fullSize,
+            w: Math.max(1, w), h: Math.max(1, h),
+            left: left, top: top
         });
     }
 
     targets.sort(function (a, b) { return b.index - a.index; });
 
     for (var j = 0; j < targets.length; j++) {
-        var d = targets[j], layer = null;
-
-        for (var n = 1; n <= comp.numLayers; n++) {
-            if (comp.layer(n).id === d.id) {
-                layer = comp.layer(n);
-                break;
-            }
+        var d = targets[j];
+        var layer = comp.layer(d.index); 
+        if (!layer || layer.id !== d.id) {
+             for(var n=1; n<=comp.numLayers; n++) { if(comp.layer(n).id === d.id) { layer = comp.layer(n); break; } }
         }
-
-        if (!layer) continue;
 
         try {
-            var inner = comp.layers.precompose([layer.index], d.name + "_precomp", true);
-            inner.width = d.w;
-            inner.height = d.h;
-            inner.duration = d.outP - d.inP;
+            var tMarker = comp.layers.addNull();
+            tMarker.moveBefore(layer);
+            
+            var innerCompItem = comp.layers.precompose([tMarker.index, layer.index], d.name + "_precomp", true);
+            innerCompItem.layer(1).remove(); 
+            innerCompItem.width = d.w;
+            innerCompItem.height = d.h;
+            innerCompItem.duration = d.outP - d.inP;
 
-            var pre = null;
-            for (var p = 1; p <= comp.numLayers; p++) {
-                if (comp.layer(p).source === inner) {
-                    pre = comp.layer(p);
-                    break;
-                }
-            }
-
-            if (!pre) continue;
-
-            var il = inner.layer(1);
-
+            var il = innerCompItem.layer(1); 
+            var pre = comp.layer(d.index); 
             il.startTime = d.start - d.inP;
-            il.inPoint = 0;
-            il.outPoint = inner.duration;
-            il.anchorPoint.setValue([0, 0]);
-            il.position.setValue([-d.left, -d.top]);
-            il.scale.setValue([100, 100]);
-            if (il.property("Rotation")) il.property("Rotation").setValue(0);
-
+            
+            if (!d.fullSize) {
+                setSafe(il.property("Anchor Point"), d.anchor);
+                setSafe(il.property("Position"), [d.w/2, d.h/2]);
+            }
             pre.startTime = d.inP;
-            pre.inPoint = d.inP;
-            pre.outPoint = d.outP;
-            pre.position.setValue(d.pos);
-            pre.scale.setValue(d.scale);
-            pre.opacity.setValue(d.opacity);
-            pre.anchorPoint.setValue([d.w / 2, d.h / 2]);
-            if (pre.property("Rotation")) pre.property("Rotation").setValue(d.rot);
+            setSafe(pre.property("Anchor Point"), [d.w/2, d.h/2]);
+            setSafe(pre.property("Position"), d.pos);
+
+            if (d.parent) pre.setParentWithJump(d.parent);
 
         } catch (e) {
-            alert("Error on layer: " + d.name + "\n" + e.toString());
+            alert("Error: " + d.name + "\n" + e.toString());
         }
     }
-
     app.endUndoGroup();
 }
