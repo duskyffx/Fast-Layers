@@ -96,11 +96,11 @@ function runBatchPrecomp() {
     csInterface.evalScript("batchPrecompose()");
 }
 
-var CURRENT_VERSION = "1.1.0";
+var CURRENT_VERSION = "1.0.0";
 
 document.addEventListener("DOMContentLoaded", function () {
 
-    fetch("https://raw.githubusercontent.com/duskyffx/Fast-Layers/refs/heads/main/version.json")
+    fetch("https://raw.githubusercontent.com/duskyffx/Fast-Layers/main/version.json")
         .then(function (res) { return res.json(); })
         .then(function (data) {
 
@@ -115,7 +115,11 @@ document.addEventListener("DOMContentLoaded", function () {
                 document.getElementById("updateBox").style.display = "block";
 
                 document.getElementById("downloadUpdateBtn").onclick = function () {
-                    window.open(data.url);
+                    if (typeof cep !== "undefined" && cep.util) {
+                        cep.util.openURLInDefaultBrowser(data.url);
+                    } else {
+                        window.open(data.url, "_blank");
+                    }
                 };
             }
 
@@ -127,4 +131,63 @@ document.addEventListener("DOMContentLoaded", function () {
         document.getElementById("updateBox").style.display = "none";
     };
 
+});
+
+var REPORT_SERVER = "https://server-for-script.onrender.com";
+
+document.addEventListener("DOMContentLoaded", function () {
+    var reportModal = document.getElementById("reportModal");
+
+    document.getElementById("reportOpenBtn").onclick = function () {
+        reportModal.style.display = "flex";
+    };
+
+    document.getElementById("reportCloseBtn").onclick = function () {
+        reportModal.style.display = "none";
+    };
+
+    document.getElementById("reportSendBtn").onclick = function () {
+        var text = document.getElementById("reportText").value.trim();
+        var file = document.getElementById("reportImage").files[0];
+
+        var caption =
+            "⚠️ Fast Tools Report\n\n" +
+            "Problem:\n" + (text || "No text") + "\n\n" +
+            "Version: " + CURRENT_VERSION;
+
+        if (!text && !file) {
+            alert("Write something or attach a photo");
+            return;
+        }
+
+        if (file) {
+            var formData = new FormData();
+            formData.append("caption", caption);
+            formData.append("photo", file);
+
+            fetch(REPORT_SERVER + "/report-photo", {
+                method: "POST",
+                body: formData
+            }).then(function () {
+                alert("Sent!");
+                document.getElementById("reportText").value = "";
+                document.getElementById("reportImage").value = "";
+                reportModal.style.display = "none";
+            }).catch(function () {
+                alert("Error sending");
+            });
+        } else {
+            fetch(REPORT_SERVER + "/report", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: caption })
+            }).then(function () {
+                alert("Sent!");
+                document.getElementById("reportText").value = "";
+                reportModal.style.display = "none";
+            }).catch(function () {
+                alert("Error sending");
+            });
+        }
+    };
 });

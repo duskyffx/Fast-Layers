@@ -11,16 +11,15 @@
             <div class="title">Key Panel</div>
         </div>
 
-        <div id="updateBox" class="update-box" style="display:none;">
+        <div id="updateBox" class="update-box" style="display: none;">
             <div class="update-title">An update has been released</div>
             <div id="updateVersion" class="update-version"></div>
             <div id="updateMessage" class="update-message"></div>
-
-        <div class="update-actions">
-            <button id="downloadUpdateBtn">Download</button>
-            <button id="closeUpdateBtn">Later</button>
+            <div class="update-actions">
+                <button id="downloadUpdateBtn">Download</button>
+                <button id="closeUpdateBtn">Later</button>
+            </div>
         </div>
-    </div>
 
         <div class="card">
             <div class="info">
@@ -35,7 +34,7 @@
                 <div class="name">Solid Layer</div>
             </div>
             <div class="settings-toggle" onclick="toggleSettings()">⚙️</div>
-            <input type="color" id="solidColor" value="#00e5ff" onclick="this.focus()">
+            <input type="color" id="solidColor" value="#00e5ff">
             <button onclick="runSolid(false)">Gen</button>
             <button onclick="runSolid(true)" class="secondary">Bind</button>
         </div>
@@ -70,8 +69,8 @@
                 <div class="desc">split layers by markers</div>
             </div>
             <select id="markerSource" style="width: 80px;"></select>
-                <button onclick="refreshMarkerSourcesBtn()">🔄</button>
-                <button onclick="trimByMarkersBtn()">Trim</button>
+            <button onclick="refreshMarkerSourcesBtn()">🔄</button>
+            <button onclick="trimByMarkersBtn()">Trim</button>
         </div>
 
         <div class="tools">
@@ -79,7 +78,7 @@
             <button onclick="runRemap()">Remap Keys</button>
         </div>
 
-        
+        <button id="reportOpenBtn" class="report-btn" onclick="document.getElementById('reportModal').classList.add('active')">Report Problem</button>
     </div>
 
     <div id="modalOverlay" class="modal-overlay">
@@ -100,6 +99,18 @@
                 <div class="modal-hint">Leave empty for Comp Size</div>
             </div>
             <button class="modal-save" onclick="toggleSettings()">Apply</button>
+        </div>
+    </div>
+
+    <div id="reportModal" class="report-modal">
+        <div class="report-content">
+            <div class="report-header">
+                <span>Report a problem</span>
+                <div id="reportCloseBtn" class="close-btn" onclick="document.getElementById('reportModal').classList.remove('active')">×</div>
+            </div>
+            <textarea id="reportText" placeholder="Describe the problem..."></textarea>
+            <input type="file" id="reportImage" accept="image/*">
+            <button id="reportSendBtn">Send</button>
         </div>
     </div>
 
