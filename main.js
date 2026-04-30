@@ -100,7 +100,7 @@ var CURRENT_VERSION = "1.0.0";
 
 document.addEventListener("DOMContentLoaded", function () {
 
-    fetch("https://github.com/duskyffx/Fast-Layers/version.json")
+    fetch("https://raw.githubusercontent.com/duskyffx/Fast-Layers/refs/heads/main/version.json")
         .then(function (res) { return res.json(); })
         .then(function (data) {
 
