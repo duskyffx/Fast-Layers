@@ -63,8 +63,8 @@ function createSolid(parentFlag, hex, w, h) {
         for (var i = 0; i < sel.length; i++) {
             var target = sel[i];
             
-            var finalW = (w && w > 0) ? w : (target.width || comp.width);
-            var finalH = (h && h > 0) ? h : (target.height || comp.height);
+            var finalW = (w && w > 0) ? w : comp.width;
+            var finalH = (h && h > 0) ? h : comp.height;
 
             var s = comp.layers.addSolid(color, "Solid", finalW, finalH, 1);
             
