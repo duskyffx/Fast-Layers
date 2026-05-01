@@ -397,6 +397,7 @@ function duplicateCompUnique() {
 
 function setSafe(prop, value) {
     if (!prop) return;
+    if (!prop.enabled) return; 
     if (prop.numKeys === 0) {
         prop.setValue(value);
     }
@@ -417,15 +418,18 @@ function batchPrecompose() {
     for (var i = 0; i < sel.length; i++) {
         var l = sel[i];
         var r = null;
-        try { r = l.sourceRectAtTime(comp.time, false); } catch (e) {}
+        
+        if (l.hasVideo) {
+            try { r = l.sourceRectAtTime(comp.time, false); } catch (e) {}
+        }
 
         var isNull = l.nullLayer;
         var hasParent = l.parent !== null;
-        var fullSize = isNull || hasParent;
+        var fullSize = isNull || hasParent || !l.hasVideo;
 
         var w = comp.width, h = comp.height, left = 0, top = 0;
 
-        if (!fullSize) {
+        if (!fullSize && l.hasVideo) {
             if (r && r.width > 0) {
                 w = Math.ceil(r.width) + padding * 2;
                 h = Math.ceil(r.height) + padding * 2;
@@ -437,6 +441,13 @@ function batchPrecompose() {
             }
         }
 
+        var transformData = {
+            pos: l.hasVideo ? l.property("Position").value : [0,0],
+            scale: l.hasVideo ? l.property("Scale").value : [100,100],
+            anchor: l.hasVideo ? l.property("Anchor Point").value : [0,0],
+            rot: (l.hasVideo && l.property("Rotation")) ? l.property("Rotation").value : 0
+        };
+
         targets.push({
             id: l.id,
             index: l.index,
@@ -444,12 +455,10 @@ function batchPrecompose() {
             inP: l.inPoint,
             outP: l.outPoint,
             start: l.startTime,
-            pos: l.property("Position").value,
-            scale: l.property("Scale").value,
-            anchor: l.property("Anchor Point").value,
-            rot: l.property("Rotation") ? l.property("Rotation").value : 0,
+            transform: transformData,
             parent: l.parent,
             isNull: isNull,
+            hasVideo: l.hasVideo,
             fullSize: fullSize,
             w: Math.max(1, w), h: Math.max(1, h),
             left: left, top: top
@@ -460,10 +469,10 @@ function batchPrecompose() {
 
     for (var j = 0; j < targets.length; j++) {
         var d = targets[j];
-        var layer = comp.layer(d.index); 
-        if (!layer || layer.id !== d.id) {
-             for(var n=1; n<=comp.numLayers; n++) { if(comp.layer(n).id === d.id) { layer = comp.layer(n); break; } }
-        }
+        var layer = null;
+        for(var n=1; n<=comp.numLayers; n++) { if(comp.layer(n).id === d.id) { layer = comp.layer(n); break; } }
+
+        if (!layer) continue;
 
         try {
             var tMarker = comp.layers.addNull();
@@ -471,26 +480,32 @@ function batchPrecompose() {
             
             var innerCompItem = comp.layers.precompose([tMarker.index, layer.index], d.name + "_precomp", true);
             innerCompItem.layer(1).remove(); 
+            
             innerCompItem.width = d.w;
             innerCompItem.height = d.h;
-            innerCompItem.duration = d.outP - d.inP;
+            innerCompItem.duration = Math.max(d.outP - d.inP, 0.1);
 
             var il = innerCompItem.layer(1); 
             var pre = comp.layer(d.index); 
+
             il.startTime = d.start - d.inP;
             
-            if (!d.fullSize) {
-                setSafe(il.property("Anchor Point"), d.anchor);
+            if (d.hasVideo && !d.fullSize) {
+                setSafe(il.property("Anchor Point"), d.transform.anchor);
                 setSafe(il.property("Position"), [d.w/2, d.h/2]);
             }
+
             pre.startTime = d.inP;
-            setSafe(pre.property("Anchor Point"), [d.w/2, d.h/2]);
-            setSafe(pre.property("Position"), d.pos);
+            
+            if (d.hasVideo) {
+                setSafe(pre.property("Anchor Point"), [d.w/2, d.h/2]);
+                setSafe(pre.property("Position"), d.transform.pos);
+            }
 
             if (d.parent) pre.setParentWithJump(d.parent);
 
         } catch (e) {
-            alert("Error: " + d.name + "\n" + e.toString());
+            $.writeln("Error: " + d.name + " - " + e.toString());
         }
     }
     app.endUndoGroup();
