@@ -328,13 +328,13 @@ function collectPropertyValues(prop, store) {
 
         if (prop.propertyType === PropertyType.PROPERTY) {
             var entry = {
-                matchName:         prop.matchName,
+                matchName: prop.matchName,
                 expressionEnabled: false,
-                expression:        "",
-                value:             null,
-                isLayerRef:        false,
-                layerIndex:        -1,
-                skip:              false
+                expression: "",
+                value: null,
+                isLayerRef: false,
+                layerIndex: -1,
+                skip: false
             };
 
             try {
@@ -356,7 +356,11 @@ function collectPropertyValues(prop, store) {
             store.push(entry);
 
         } else {
-            store.push({ matchName: prop.matchName, isGroup: true, skip: false });
+            store.push({
+                matchName: prop.matchName,
+                isGroup: true,
+                skip: false
+            });
 
             for (var i = 1; i <= prop.numProperties; i++) {
                 try {
@@ -383,7 +387,9 @@ function restorePropertyValues(prop, store, cursor, innerIndexToNewLayer) {
                 } catch(e) {}
             } else {
                 try {
-                    if (entry.value !== null) prop.setValue(entry.value);
+                    if (entry.value !== null) {
+                        prop.setValue(entry.value);
+                    }
                 } catch(e) {}
             }
 
@@ -407,7 +413,12 @@ function restorePropertyValues(prop, store, cursor, innerIndexToNewLayer) {
         } else {
             for (var i = 1; i <= prop.numProperties; i++) {
                 try {
-                    restorePropertyValues(prop.property(i), store, cursor, innerIndexToNewLayer);
+                    restorePropertyValues(
+                        prop.property(i),
+                        store,
+                        cursor,
+                        innerIndexToNewLayer
+                    );
                 } catch(e) {}
             }
         }
@@ -426,12 +437,12 @@ function collectMarkers(layer) {
                 var mv = markerProp.keyValue(i);
 
                 markers.push({
-                    time:     markerProp.keyTime(i),
-                    comment:  mv.comment,
+                    time: markerProp.keyTime(i),
+                    comment: mv.comment,
                     duration: mv.duration,
-                    chapter:  mv.chapter,
-                    url:      mv.url,
-                    label:    mv.label,
+                    chapter: mv.chapter,
+                    url: mv.url,
+                    label: mv.label,
                     cuePointName: mv.cuePointName
                 });
             } catch(e) {}
@@ -441,7 +452,7 @@ function collectMarkers(layer) {
     return markers;
 }
 
-function restoreMarkers(layer, markers, timeOffset) {
+function restoreMarkers(layer, markers) {
     try {
         var markerProp = layer.property("Marker");
         if (!markerProp) return;
@@ -456,16 +467,16 @@ function restoreMarkers(layer, markers, timeOffset) {
 
         for (var i = 0; i < markers.length; i++) {
             try {
-                var m  = markers[i];
+                var m = markers[i];
                 var mv = new MarkerValue(m.comment || "");
 
-                try { mv.duration     = m.duration;     } catch(e) {}
-                try { mv.chapter      = m.chapter;      } catch(e) {}
-                try { mv.url          = m.url;           } catch(e) {}
-                try { mv.label        = m.label;         } catch(e) {}
-                try { mv.cuePointName = m.cuePointName;  } catch(e) {}
+                try { mv.duration     = m.duration;    } catch(e) {}
+                try { mv.chapter      = m.chapter;     } catch(e) {}
+                try { mv.url          = m.url;         } catch(e) {}
+                try { mv.label        = m.label;       } catch(e) {}
+                try { mv.cuePointName = m.cuePointName; } catch(e) {}
 
-                markerProp.setValueAtTime(m.time + timeOffset, mv);
+                markerProp.setValueAtTime(m.time, mv);
             } catch(e) {}
         }
     } catch(e) {}
@@ -484,20 +495,32 @@ function restoreOriginalPrecompParents(layerInfos) {
     }
 }
 
+function clearSelection(comp) {
+    try {
+        for (var i = 1; i <= comp.numLayers; i++) {
+            comp.layer(i).selected = false;
+        }
+    } catch(e) {}
+}
+
 function unPrecompose() {
     try {
         var comp = isCompActive();
         if (!comp) return alert("Highlight the timeline!");
 
         var sel = comp.selectedLayers;
-        if (!sel || sel.length === 0) return alert("Please select precompositions!");
+        if (!sel || sel.length === 0) {
+            return alert("Please select precompositions!");
+        }
 
         var targets = [];
 
         for (var i = 0; i < sel.length; i++) {
-            if (sel[i].source instanceof CompItem) {
-                targets.push(sel[i]);
-            }
+            try {
+                if (sel[i].source instanceof CompItem) {
+                    targets.push(sel[i]);
+                }
+            } catch(e) {}
         }
 
         if (targets.length === 0) {
@@ -520,30 +543,26 @@ function unPrecompose() {
                 continue;
             }
 
-            var innerComp  = precompLayer.source;
+            var innerComp = precompLayer.source;
             var timeOffset = precompLayer.startTime;
 
             var precompWasTrimmed =
                 precompLayer.inPoint > precompLayer.startTime ||
                 precompLayer.outPoint < precompLayer.startTime + innerComp.duration;
 
-            var pIn  = precompLayer.inPoint;
+            var pIn = precompLayer.inPoint;
             var pOut = precompLayer.outPoint;
 
             try {
                 var pcScale = precompLayer.transform.scale.value;
-                var pcRot   = precompLayer.transform.rotation.value;
+                var pcRot = precompLayer.transform.rotation.value;
 
                 if (pcScale[0] !== 100 || pcScale[1] !== 100 || pcRot !== 0) {
                     transformWarnings.push(innerComp.name);
                 }
             } catch(e) {}
 
-            for (var d = 1; d <= comp.numLayers; d++) {
-                try {
-                    comp.layer(d).selected = false;
-                } catch(e) {}
-            }
+            clearSelection(comp);
 
             var layerInfos = [];
 
@@ -574,16 +593,16 @@ function unPrecompose() {
                 }
 
                 layerInfos.push({
-                    innerIndex:   j,
-                    parentIndex:  parentIndex,
-                    sourceLayer:  innerLayer,
+                    innerIndex: j,
+                    parentIndex: parentIndex,
+                    sourceLayer: innerLayer,
                     sourceParent: sourceParent,
-                    worldXform:   worldXform,
+                    worldXform: worldXform,
                     propSnapshot: propSnapshot,
-                    markers:      collectMarkers(innerLayer),
-                    innerStart:   innerLayer.startTime,
-                    innerIn:      innerLayer.inPoint,
-                    innerOut:     innerLayer.outPoint
+                    markers: collectMarkers(innerLayer),
+                    innerStart: innerLayer.startTime,
+                    innerIn: innerLayer.inPoint,
+                    innerOut: innerLayer.outPoint
                 });
             }
 
@@ -617,7 +636,7 @@ function unPrecompose() {
             restoreOriginalPrecompParents(layerInfos);
             for (var k = 0; k < copiedLayers.length; k++) {
                 var copiedLayer = copiedLayers[k].layer;
-                var copiedInfo  = copiedLayers[k].info;
+                var copiedInfo = copiedLayers[k].info;
 
                 if (copiedInfo.parentIndex !== -1) {
                     var parentObj = innerIndexToNewLayer[copiedInfo.parentIndex];
@@ -647,11 +666,19 @@ function unPrecompose() {
                     } catch(e) {}
                 }
 
-                restoreMarkers(newCopiedLayer, restoreInfo.markers, timeOffset);
+                restoreMarkers(newCopiedLayer, restoreInfo.markers);
 
-                try { newCopiedLayer.startTime = restoreInfo.innerStart + timeOffset; } catch(e) {}
-                try { newCopiedLayer.inPoint   = restoreInfo.innerIn    + timeOffset; } catch(e) {}
-                try { newCopiedLayer.outPoint  = restoreInfo.innerOut   + timeOffset; } catch(e) {}
+                try {
+                    newCopiedLayer.startTime = restoreInfo.innerStart + timeOffset;
+                } catch(e) {}
+
+                try {
+                    newCopiedLayer.inPoint = restoreInfo.innerIn + timeOffset;
+                } catch(e) {}
+
+                try {
+                    newCopiedLayer.outPoint = restoreInfo.innerOut + timeOffset;
+                } catch(e) {}
 
                 if (precompWasTrimmed) {
                     try {
@@ -682,7 +709,10 @@ function unPrecompose() {
         app.endUndoGroup();
 
     } catch (e) {
-        try { app.endUndoGroup(); } catch(e2) {}
+        try {
+            app.endUndoGroup();
+        } catch(e2) {}
+
         alert("Error: " + e.toString() + "\nLine: " + e.line);
     }
 }
