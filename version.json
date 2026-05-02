@@ -1,5 +1,5 @@
 {
-  "version": "1.0.2",
-  "message": "Fixed precompose with audio file.",
+  "version": "1.0.3",
+  "message": "Fixed un-precompose with some files. Ty for reports) .",
   "url": "https://github.com/duskyffx/Fast-Layers/archive/refs/heads/main.zip"
 }

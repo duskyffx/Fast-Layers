@@ -281,77 +281,410 @@ function trimByMarkerSource(source) {
     }
 }
 
+function getWorldTransform(layer) {
+    var t = {};
+    try { t.position    = layer.transform.position.value;    } catch(e) {}
+    try { t.scale       = layer.transform.scale.value;       } catch(e) {}
+    try { t.rotation    = layer.transform.rotation.value;    } catch(e) {}
+    try { t.anchorPoint = layer.transform.anchorPoint.value; } catch(e) {}
+    try { t.opacity     = layer.transform.opacity.value;     } catch(e) {}
+    try { t.orientation = layer.transform.orientation.value; } catch(e) {}
+    try { t.xRotation   = layer.transform.xRotation.value;   } catch(e) {}
+    try { t.yRotation   = layer.transform.yRotation.value;   } catch(e) {}
+    return t;
+}
+
+function setWorldTransform(layer, t) {
+    try { if (t.position    !== undefined) layer.transform.position.setValue(t.position);       } catch(e) {}
+    try { if (t.scale       !== undefined) layer.transform.scale.setValue(t.scale);             } catch(e) {}
+    try { if (t.rotation    !== undefined) layer.transform.rotation.setValue(t.rotation);       } catch(e) {}
+    try { if (t.anchorPoint !== undefined) layer.transform.anchorPoint.setValue(t.anchorPoint); } catch(e) {}
+    try { if (t.opacity     !== undefined) layer.transform.opacity.setValue(t.opacity);         } catch(e) {}
+    try { if (t.orientation !== undefined) layer.transform.orientation.setValue(t.orientation); } catch(e) {}
+    try { if (t.xRotation   !== undefined) layer.transform.xRotation.setValue(t.xRotation);    } catch(e) {}
+    try { if (t.yRotation   !== undefined) layer.transform.yRotation.setValue(t.yRotation);    } catch(e) {}
+}
+
+var SKIP_MATCH_NAMES = {
+    "ADBE Marker":          true,
+    "ADBE MaskAttr":        true,
+    "ADBE Mask Parade":     true,
+    "ADBE Transform Group": true
+};
+
+function shouldSkipProp(prop) {
+    try {
+        if (SKIP_MATCH_NAMES[prop.matchName]) return true;
+    } catch(e) {}
+    return false;
+}
+
+function collectPropertyValues(prop, store) {
+    try {
+        if (shouldSkipProp(prop)) {
+            store.push({ skip: true, matchName: prop.matchName });
+            return;
+        }
+
+        if (prop.propertyType === PropertyType.PROPERTY) {
+            var entry = {
+                matchName:         prop.matchName,
+                expressionEnabled: false,
+                expression:        "",
+                value:             null,
+                isLayerRef:        false,
+                layerIndex:        -1,
+                skip:              false
+            };
+
+            try {
+                if (prop.expressionEnabled) {
+                    entry.expressionEnabled = true;
+                    entry.expression = prop.expression;
+                }
+            } catch(e) {}
+
+            try {
+                if (prop.propertyValueType === PropertyValueType.LAYER_INDEX) {
+                    entry.isLayerRef = true;
+                    entry.layerIndex = prop.value;
+                } else {
+                    entry.value = prop.value;
+                }
+            } catch(e) {}
+
+            store.push(entry);
+
+        } else {
+            store.push({ matchName: prop.matchName, isGroup: true, skip: false });
+
+            for (var i = 1; i <= prop.numProperties; i++) {
+                try {
+                    collectPropertyValues(prop.property(i), store);
+                } catch(e) {}
+            }
+        }
+    } catch(e) {}
+}
+
+function restorePropertyValues(prop, store, cursor, innerIndexToNewLayer) {
+    try {
+        var entry = store[cursor[0]];
+        cursor[0]++;
+
+        if (!entry || entry.skip) return;
+
+        if (prop.propertyType === PropertyType.PROPERTY) {
+            if (entry.isLayerRef) {
+                try {
+                    if (entry.layerIndex > 0 && innerIndexToNewLayer[entry.layerIndex]) {
+                        prop.setValue(innerIndexToNewLayer[entry.layerIndex].index);
+                    }
+                } catch(e) {}
+            } else {
+                try {
+                    if (entry.value !== null) prop.setValue(entry.value);
+                } catch(e) {}
+            }
+
+            if (entry.expressionEnabled && entry.expression !== "") {
+                try {
+                    var expr = entry.expression;
+
+                    for (var oldIdx in innerIndexToNewLayer) {
+                        if (innerIndexToNewLayer.hasOwnProperty(oldIdx)) {
+                            var newIdx = innerIndexToNewLayer[oldIdx].index;
+                            var re = new RegExp("(\\.layer\\()(" + oldIdx + ")(\\))", "g");
+                            expr = expr.replace(re, "$1" + newIdx + "$3");
+                        }
+                    }
+
+                    prop.expressionEnabled = true;
+                    prop.expression = expr;
+                } catch(e) {}
+            }
+
+        } else {
+            for (var i = 1; i <= prop.numProperties; i++) {
+                try {
+                    restorePropertyValues(prop.property(i), store, cursor, innerIndexToNewLayer);
+                } catch(e) {}
+            }
+        }
+    } catch(e) {}
+}
+
+function collectMarkers(layer) {
+    var markers = [];
+
+    try {
+        var markerProp = layer.property("Marker");
+        if (!markerProp) return markers;
+
+        for (var i = 1; i <= markerProp.numKeys; i++) {
+            try {
+                var mv = markerProp.keyValue(i);
+
+                markers.push({
+                    time:     markerProp.keyTime(i),
+                    comment:  mv.comment,
+                    duration: mv.duration,
+                    chapter:  mv.chapter,
+                    url:      mv.url,
+                    label:    mv.label,
+                    cuePointName: mv.cuePointName
+                });
+            } catch(e) {}
+        }
+    } catch(e) {}
+
+    return markers;
+}
+
+function restoreMarkers(layer, markers, timeOffset) {
+    try {
+        var markerProp = layer.property("Marker");
+        if (!markerProp) return;
+
+        while (markerProp.numKeys > 0) {
+            try {
+                markerProp.removeKey(1);
+            } catch(e) {
+                break;
+            }
+        }
+
+        for (var i = 0; i < markers.length; i++) {
+            try {
+                var m  = markers[i];
+                var mv = new MarkerValue(m.comment || "");
+
+                try { mv.duration     = m.duration;     } catch(e) {}
+                try { mv.chapter      = m.chapter;      } catch(e) {}
+                try { mv.url          = m.url;           } catch(e) {}
+                try { mv.label        = m.label;         } catch(e) {}
+                try { mv.cuePointName = m.cuePointName;  } catch(e) {}
+
+                markerProp.setValueAtTime(m.time + timeOffset, mv);
+            } catch(e) {}
+        }
+    } catch(e) {}
+}
+
+function restoreOriginalPrecompParents(layerInfos) {
+    for (var i = 0; i < layerInfos.length; i++) {
+        var info = layerInfos[i];
+
+        try {
+            if (info.sourceLayer && info.sourceParent) {
+                info.sourceLayer.parent = info.sourceParent;
+                setWorldTransform(info.sourceLayer, info.worldXform);
+            }
+        } catch(e) {}
+    }
+}
+
 function unPrecompose() {
-    var comp = isCompActive();
-    if (!comp) return alert("Highlight the timeline!");
+    try {
+        var comp = isCompActive();
+        if (!comp) return alert("Highlight the timeline!");
 
-    var sel = comp.selectedLayers;
-    if (!sel || sel.length === 0) return alert("Please select precompositions!");
+        var sel = comp.selectedLayers;
+        if (!sel || sel.length === 0) return alert("Please select precompositions!");
 
-    var targets = [];
+        var targets = [];
 
-    for (var i = 0; i < sel.length; i++) {
-        if (sel[i].source instanceof CompItem) {
-            targets.push(sel[i]);
+        for (var i = 0; i < sel.length; i++) {
+            if (sel[i].source instanceof CompItem) {
+                targets.push(sel[i]);
+            }
         }
+
+        if (targets.length === 0) {
+            return alert("Among the selected layers, there are no precompositions.");
+        }
+
+        targets.sort(function (a, b) {
+            return b.index - a.index;
+        });
+
+        app.beginUndoGroup("Un-precompose Keep Order");
+
+        var totalExpanded = 0;
+        var transformWarnings = [];
+
+        for (var t = 0; t < targets.length; t++) {
+            var precompLayer = targets[t];
+
+            if (!precompLayer || !(precompLayer.source instanceof CompItem)) {
+                continue;
+            }
+
+            var innerComp  = precompLayer.source;
+            var timeOffset = precompLayer.startTime;
+
+            var precompWasTrimmed =
+                precompLayer.inPoint > precompLayer.startTime ||
+                precompLayer.outPoint < precompLayer.startTime + innerComp.duration;
+
+            var pIn  = precompLayer.inPoint;
+            var pOut = precompLayer.outPoint;
+
+            try {
+                var pcScale = precompLayer.transform.scale.value;
+                var pcRot   = precompLayer.transform.rotation.value;
+
+                if (pcScale[0] !== 100 || pcScale[1] !== 100 || pcRot !== 0) {
+                    transformWarnings.push(innerComp.name);
+                }
+            } catch(e) {}
+
+            for (var d = 1; d <= comp.numLayers; d++) {
+                try {
+                    comp.layer(d).selected = false;
+                } catch(e) {}
+            }
+
+            var layerInfos = [];
+
+            for (var j = 1; j <= innerComp.numLayers; j++) {
+                var innerLayer = innerComp.layer(j);
+
+                var worldXform = getWorldTransform(innerLayer);
+
+                var parentIndex = -1;
+                var sourceParent = null;
+
+                try {
+                    if (innerLayer.parent) {
+                        parentIndex = innerLayer.parent.index;
+                        sourceParent = innerLayer.parent;
+
+                        innerLayer.parent = null;
+                        setWorldTransform(innerLayer, worldXform);
+                    }
+                } catch(e) {}
+
+                var propSnapshot = [];
+
+                for (var pi = 1; pi <= innerLayer.numProperties; pi++) {
+                    try {
+                        collectPropertyValues(innerLayer.property(pi), propSnapshot);
+                    } catch(e) {}
+                }
+
+                layerInfos.push({
+                    innerIndex:   j,
+                    parentIndex:  parentIndex,
+                    sourceLayer:  innerLayer,
+                    sourceParent: sourceParent,
+                    worldXform:   worldXform,
+                    propSnapshot: propSnapshot,
+                    markers:      collectMarkers(innerLayer),
+                    innerStart:   innerLayer.startTime,
+                    innerIn:      innerLayer.inPoint,
+                    innerOut:     innerLayer.outPoint
+                });
+            }
+
+            var innerIndexToNewLayer = {};
+            var copiedLayers = [];
+            var insertAfterLayer = null;
+
+            for (var c = 1; c <= innerComp.numLayers; c++) {
+                var sourceLayer = innerComp.layer(c);
+
+                sourceLayer.copyToComp(comp);
+
+                var newLayer = comp.layer(1);
+
+                if (c === 1) {
+                    newLayer.moveBefore(precompLayer);
+                } else {
+                    newLayer.moveAfter(insertAfterLayer);
+                }
+
+                insertAfterLayer = newLayer;
+
+                innerIndexToNewLayer[layerInfos[c - 1].innerIndex] = newLayer;
+
+                copiedLayers.push({
+                    layer: newLayer,
+                    info: layerInfos[c - 1]
+                });
+            }
+
+            restoreOriginalPrecompParents(layerInfos);
+            for (var k = 0; k < copiedLayers.length; k++) {
+                var copiedLayer = copiedLayers[k].layer;
+                var copiedInfo  = copiedLayers[k].info;
+
+                if (copiedInfo.parentIndex !== -1) {
+                    var parentObj = innerIndexToNewLayer[copiedInfo.parentIndex];
+
+                    if (parentObj) {
+                        try {
+                            copiedLayer.parent = parentObj;
+                            setWorldTransform(copiedLayer, copiedInfo.worldXform);
+                        } catch(e) {}
+                    }
+                }
+            }
+
+            for (var r = 0; r < copiedLayers.length; r++) {
+                var newCopiedLayer = copiedLayers[r].layer;
+                var restoreInfo = copiedLayers[r].info;
+                var cursor = [0];
+
+                for (var rp = 1; rp <= newCopiedLayer.numProperties; rp++) {
+                    try {
+                        restorePropertyValues(
+                            newCopiedLayer.property(rp),
+                            restoreInfo.propSnapshot,
+                            cursor,
+                            innerIndexToNewLayer
+                        );
+                    } catch(e) {}
+                }
+
+                restoreMarkers(newCopiedLayer, restoreInfo.markers, timeOffset);
+
+                try { newCopiedLayer.startTime = restoreInfo.innerStart + timeOffset; } catch(e) {}
+                try { newCopiedLayer.inPoint   = restoreInfo.innerIn    + timeOffset; } catch(e) {}
+                try { newCopiedLayer.outPoint  = restoreInfo.innerOut   + timeOffset; } catch(e) {}
+
+                if (precompWasTrimmed) {
+                    try {
+                        if (newCopiedLayer.inPoint < pIn) {
+                            newCopiedLayer.inPoint = pIn;
+                        }
+                    } catch(e) {}
+
+                    try {
+                        if (newCopiedLayer.outPoint > pOut) {
+                            newCopiedLayer.outPoint = pOut;
+                        }
+                    } catch(e) {}
+                }
+
+                try {
+                    newCopiedLayer.selected = true;
+                } catch(e) {}
+            }
+
+            try {
+                precompLayer.remove();
+            } catch(e) {}
+
+            totalExpanded++;
+        }
+
+        app.endUndoGroup();
+
+    } catch (e) {
+        try { app.endUndoGroup(); } catch(e2) {}
+        alert("Error: " + e.toString() + "\nLine: " + e.line);
     }
-
-    if (targets.length === 0) {
-        return alert("Among the selected layers, there are no precompositions.");
-    }
-
-    targets.sort(function (a, b) {
-        return b.index - a.index;
-    });
-
-    app.beginUndoGroup("Un-precompose Keep Order");
-
-    for (var t = 0; t < targets.length; t++) {
-        var precompLayer = targets[t];
-
-        if (!precompLayer || !(precompLayer.source instanceof CompItem)) {
-            continue;
-        }
-
-        var innerComp = precompLayer.source;
-
-        var pStart = precompLayer.startTime;
-        var pIn = precompLayer.inPoint;
-        var pOut = precompLayer.outPoint;
-
-        for (var d = 1; d <= comp.numLayers; d++) {
-            comp.layer(d).selected = false;
-        }
-
-        var createdLayers = [];
-
-        for (var j = 1; j <= innerComp.numLayers; j++) {
-            var innerLayer = innerComp.layer(j);
-
-            innerLayer.copyToComp(comp);
-
-            var newLayer = comp.layer(1);
-
-            newLayer.moveBefore(precompLayer);
-
-            newLayer.startTime = pStart + innerLayer.startTime;
-            newLayer.inPoint = pStart + innerLayer.inPoint;
-            newLayer.outPoint = pStart + innerLayer.outPoint;
-
-            if (newLayer.inPoint < pIn) newLayer.inPoint = pIn;
-            if (newLayer.outPoint > pOut) newLayer.outPoint = pOut;
-
-            createdLayers.push(newLayer);
-        }
-
-        precompLayer.remove();
-
-        for (var k = 0; k < createdLayers.length; k++) {
-            createdLayers[k].selected = true;
-        }
-    }
-
-    app.endUndoGroup();
 }
 
 function duplicateCompUnique() {
