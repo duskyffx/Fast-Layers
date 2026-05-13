@@ -271,6 +271,7 @@ select:hover { border-color: var(--accent); box-shadow: 0 0 8px rgba(183,148,244
 
 .row { display: flex; align-items: center; gap: 6px; width: 100%; }
 .row label { font-size: 10px; color: var(--dim); white-space: nowrap; }
+
 .psr-check {
     display: inline-flex;
     align-items: center;

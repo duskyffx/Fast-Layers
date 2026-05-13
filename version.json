@@ -1,5 +1,5 @@
 {
-  "version": "1.0.5",
-  "message": "Fix: null handling. Thanks for the reports!",
+  "version": "1.0.6",
+  "message": "Fixed null reference error in some cases. Ty for reports) .",
   "url": "https://github.com/duskyffx/Fast-Layers/archive/refs/heads/main.zip"
 }
