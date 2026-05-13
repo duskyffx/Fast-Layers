@@ -1,5 +1,5 @@
 var csInterface = new CSInterface();
-var CURRENT_VERSION = "1.0.4";
+var CURRENT_VERSION = "1.0.5";
 
 window.addEventListener("load", function () {
     initTabs();

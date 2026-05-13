@@ -3,10 +3,10 @@ function createNull(parentFlag, optsJSON) {
     if (optsJSON) {
         try {
             var m;
-            m = optsJSON.match(/"keysP"\s*:\s*(true|false)/);      if (m) keysP = (m[1] === "true");
-            m = optsJSON.match(/"keysS"\s*:\s*(true|false)/);      if (m) keysS = (m[1] === "true");
-            m = optsJSON.match(/"keysR"\s*:\s*(true|false)/);      if (m) keysR = (m[1] === "true");
-            m = optsJSON.match(/"motionTile"\s*:\s*(true|false)/); if (m) mt    = (m[1] === "true");
+            m = optsJSON.match(/"keysP"\s*:\s*(true|false)/); if (m) keysP = (m[1] === "true");
+            m = optsJSON.match(/"keysS"\s*:\s*(true|false)/); if (m) keysS = (m[1] === "true");
+            m = optsJSON.match(/"keysR"\s*:\s*(true|false)/); if (m) keysR = (m[1] === "true");
+            m = optsJSON.match(/"motionTile"\s*:\s*(true|false)/); if (m) mt = (m[1] === "true");
         } catch(e) {}
     }
 
@@ -14,59 +14,103 @@ function createNull(parentFlag, optsJSON) {
     if (!comp) return alert("Please click on the timeline first!");
 
     var sel = comp.selectedLayers;
-    var targets = [];
-    for (var i = 0; i < sel.length; i++) targets.push(sel[i]);
+    app.beginUndoGroup("Create Control Null");
 
-    app.beginUndoGroup("Create Null");
     var created = [];
 
-    if (targets.length === 0) {
-        var n0 = comp.layers.addNull(comp.duration);
-        n0.name = "Null";
-        created.push(n0);
-    } else {
-        for (var i = 0; i < targets.length; i++) {
-            var target    = targets[i];
-            var oldParent = target.parent;   // может быть null
-
-            var n = comp.layers.addNull(comp.duration);
-            n.name = "Null";
-            n.inPoint  = target.inPoint;
-            n.outPoint = target.outPoint;
-
-            try { if (oldParent !== null) n.parent = oldParent; } catch(e) {}
-
-            try { n.property("Position").setValue(target.property("Position").value); } catch(e) {}
-            try { n.property("Rotation").setValue(target.property("Rotation").value); } catch(e) {}
-            try { n.property("Scale").setValue(target.property("Scale").value); } catch(e) {}
-            try { n.property("Anchor Point").setValue(target.property("Anchor Point").value); } catch(e) {}
-
-            try { n.setParentWithJump(null); } catch(e) {}
-
-            if (parentFlag) {
-                if (oldParent !== null) {
-                    // У target был parent — Null встаёт НАД oldParent.
-                    // target и все его соседи остаются на oldParent.
-                    try { oldParent.setParentWithJump(n); } catch(e) {}
-                } else {
-                    // У target не было parent — Null становится прямым parent.
-                    try { target.setParentWithJump(n); } catch(e) {}
-                }
-            }
-
-            // ── Размещение Null в стэке слоёв ─────────────────────
-            // Если +Link и есть oldParent — кладём Null прямо над oldParent.
-            // Иначе — над target.
-            try {
-                if (parentFlag && oldParent !== null) {
-                    n.moveBefore(oldParent);
-                } else {
-                    n.moveBefore(target);
-                }
-            } catch(e) {}
-
-            created.push(n);
+    function tr(layer, propName) {
+        try {
+            return layer.property("Transform").property(propName);
+        } catch(e) {
+            try { return layer.property(propName); } catch(e2) { return null; }
         }
+    }
+
+    function resetNullTransform(n) {
+        try { tr(n, "Anchor Point").setValue([0, 0]); } catch(e) {}
+        try { tr(n, "Scale").setValue([100, 100]); } catch(e) {}
+        try { tr(n, "Rotation").setValue(0); } catch(e) {}
+        try {
+            tr(n, "X Rotation").setValue(0);
+            tr(n, "Y Rotation").setValue(0);
+            tr(n, "Z Rotation").setValue(0);
+            tr(n, "Orientation").setValue([0, 0, 0]);
+        } catch(e) {}
+        try { tr(n, "Opacity").setValue(100); } catch(e) {}
+    }
+
+    function getRoot(layer) {
+        var root = layer;
+        while (root.parent !== null) {
+            root = root.parent;
+        }
+        return root;
+    }
+
+    function alreadyUsedRoot(arr, layer) {
+        for (var i = 0; i < arr.length; i++) {
+            if (arr[i] === layer) return true;
+        }
+        return false;
+    }
+
+    function getLayerWorldAnchor(layer) {
+        try {
+            var ap = tr(layer, "Anchor Point").value;
+            return layer.toWorld(ap);
+        } catch(e) {}
+        try {
+            return tr(layer, "Position").value;
+        } catch(e2) {}
+        return [comp.width/2, comp.height/2];
+    }
+
+    var roots = [];
+    for (var i = 0; i < sel.length; i++) {
+        var root = getRoot(sel[i]);
+        if (!alreadyUsedRoot(roots, root)) {
+            roots.push(root);
+        }
+    }
+
+    for (var r = 0; r < roots.length; r++) {
+        var rootLayer = roots[r];
+        var worldPos = getLayerWorldAnchor(rootLayer);
+
+        var nullLayer = comp.layers.addNull(comp.duration);
+        nullLayer.name = "Control - " + rootLayer.name;
+        
+        try {
+            nullLayer.threeDLayer = rootLayer.threeDLayer;
+        } catch(e) {}
+
+        resetNullTransform(nullLayer);
+
+        nullLayer.inPoint = rootLayer.inPoint;
+        nullLayer.outPoint = rootLayer.outPoint;
+
+        try {
+            tr(nullLayer, "Position").setValue(worldPos);
+        } catch(e) {}
+
+        if (parentFlag) {
+            try {
+                // Используем setParentWithJump — AE сам правильно пересчитает позицию
+                rootLayer.setParentWithJump(nullLayer);
+            } catch(e) {
+                // fallback
+                try {
+                    rootLayer.parent = nullLayer;
+                } catch(e2) {}
+            }
+        }
+
+        // Null сверху в стеке
+        try {
+            nullLayer.moveBefore(rootLayer);
+        } catch(e) {}
+
+        created.push(nullLayer);
     }
 
     for (var k = 0; k < created.length; k++) {
@@ -76,45 +120,48 @@ function createNull(parentFlag, optsJSON) {
 
         if (keysP) {
             var sepDim = false;
-            try { sepDim = nl.property("Transform").property("Position").dimensionsSeparated; } catch(e) {}
+            try { sepDim = tr(nl, "Position").dimensionsSeparated; } catch(e) {}
             if (sepDim) {
                 var axes = ["X Position", "Y Position"];
                 if (nl.threeDLayer) axes.push("Z Position");
                 for (var ax = 0; ax < axes.length; ax++) {
-                    try { var ap = nl.property("Transform").property(axes[ax]); if (ap) ap.addKey(t); } catch(e) {}
+                    try { tr(nl, axes[ax]).addKey(t); } catch(e) {}
                 }
             } else {
-                try { nl.property("Transform").property("Position").addKey(t); } catch(e) {}
+                try { tr(nl, "Position").addKey(t); } catch(e) {}
             }
         }
         if (keysR) {
             if (nl.threeDLayer) {
                 var rotProps = ["X Rotation", "Y Rotation", "Z Rotation"];
                 for (var rr = 0; rr < rotProps.length; rr++) {
-                    try { var rp = nl.property("Transform").property(rotProps[rr]); if (rp) rp.addKey(t); } catch(e) {}
+                    try { tr(nl, rotProps[rr]).addKey(t); } catch(e) {}
                 }
             } else {
-                try { nl.property("Transform").property("Rotation").addKey(t); } catch(e) {}
+                try { tr(nl, "Rotation").addKey(t); } catch(e) {}
             }
         }
         if (keysS) {
-            try { nl.property("Transform").property("Scale").addKey(t); } catch(e) {}
+            try { tr(nl, "Scale").addKey(t); } catch(e) {}
         }
     }
 
-    if (mt && targets.length > 0) {
-        for (var mtI = 0; mtI < targets.length; mtI++) {
-            var tgt = targets[mtI];
+    if (mt) {
+        for (var mtI = 0; mtI < sel.length; mtI++) {
+            var tgt = sel[mtI];
             if (!tgt.hasVideo || tgt.nullLayer) continue;
             try {
                 var fx = tgt.property("ADBE Effect Parade");
-                if (fx) {
-                    var has = false;
-                    for (var e2 = 1; e2 <= fx.numProperties; e2++) {
-                        try { if (fx.property(e2).matchName === "ADBE Tile") { has = true; break; } } catch(ex) {}
-                    }
-                    if (!has) fx.addProperty("ADBE Tile");
+                if (!fx) continue;
+                var has = false;
+                for (var e2 = 1; e2 <= fx.numProperties; e2++) {
+                    try {
+                        if (fx.property(e2).matchName === "ADBE Tile") {
+                            has = true; break;
+                        }
+                    } catch(ex) {}
                 }
+                if (!has) fx.addProperty("ADBE Tile");
             } catch(e) {}
         }
     }

@@ -1,5 +1,5 @@
 {
-  "version": "1.0.4",
-  "message": "Reworked Null, Adjustment Layer, and Precompose logic. The interface has also been updated to a more compact layout. Thanks for the reports!",
+  "version": "1.0.5",
+  "message": "Fix: null handling. Thanks for the reports!",
   "url": "https://github.com/duskyffx/Fast-Layers/archive/refs/heads/main.zip"
 }
