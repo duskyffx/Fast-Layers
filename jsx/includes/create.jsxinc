@@ -1,0 +1,236 @@
+function createNull(parentFlag, optsJSON) {
+    var keysP = false, keysS = false, keysR = false, mt = false;
+    if (optsJSON) {
+        try {
+            var m;
+            m = optsJSON.match(/"keysP"\s*:\s*(true|false)/);      if (m) keysP = (m[1] === "true");
+            m = optsJSON.match(/"keysS"\s*:\s*(true|false)/);      if (m) keysS = (m[1] === "true");
+            m = optsJSON.match(/"keysR"\s*:\s*(true|false)/);      if (m) keysR = (m[1] === "true");
+            m = optsJSON.match(/"motionTile"\s*:\s*(true|false)/); if (m) mt    = (m[1] === "true");
+        } catch(e) {}
+    }
+
+    var comp = isCompActive();
+    if (!comp) return alert("Please click on the timeline first!");
+
+    var sel = comp.selectedLayers;
+    var targets = [];
+    for (var i = 0; i < sel.length; i++) targets.push(sel[i]);
+
+    app.beginUndoGroup("Create Null");
+    var created = [];
+
+    if (targets.length === 0) {
+        var n0 = comp.layers.addNull(comp.duration);
+        n0.name = "Null";
+        created.push(n0);
+    } else {
+        for (var i = 0; i < targets.length; i++) {
+            var target    = targets[i];
+            var oldParent = target.parent;   // может быть null
+
+            var n = comp.layers.addNull(comp.duration);
+            n.name = "Null";
+            n.inPoint  = target.inPoint;
+            n.outPoint = target.outPoint;
+
+            try { if (oldParent !== null) n.parent = oldParent; } catch(e) {}
+
+            try { n.property("Position").setValue(target.property("Position").value); } catch(e) {}
+            try { n.property("Rotation").setValue(target.property("Rotation").value); } catch(e) {}
+            try { n.property("Scale").setValue(target.property("Scale").value); } catch(e) {}
+            try { n.property("Anchor Point").setValue(target.property("Anchor Point").value); } catch(e) {}
+
+            try { n.setParentWithJump(null); } catch(e) {}
+
+            if (parentFlag) {
+                if (oldParent !== null) {
+                    // У target был parent — Null встаёт НАД oldParent.
+                    // target и все его соседи остаются на oldParent.
+                    try { oldParent.setParentWithJump(n); } catch(e) {}
+                } else {
+                    // У target не было parent — Null становится прямым parent.
+                    try { target.setParentWithJump(n); } catch(e) {}
+                }
+            }
+
+            // ── Размещение Null в стэке слоёв ─────────────────────
+            // Если +Link и есть oldParent — кладём Null прямо над oldParent.
+            // Иначе — над target.
+            try {
+                if (parentFlag && oldParent !== null) {
+                    n.moveBefore(oldParent);
+                } else {
+                    n.moveBefore(target);
+                }
+            } catch(e) {}
+
+            created.push(n);
+        }
+    }
+
+    for (var k = 0; k < created.length; k++) {
+        var nl = created[k];
+        if (!(keysP || keysS || keysR)) break;
+        var t = nl.inPoint;
+
+        if (keysP) {
+            var sepDim = false;
+            try { sepDim = nl.property("Transform").property("Position").dimensionsSeparated; } catch(e) {}
+            if (sepDim) {
+                var axes = ["X Position", "Y Position"];
+                if (nl.threeDLayer) axes.push("Z Position");
+                for (var ax = 0; ax < axes.length; ax++) {
+                    try { var ap = nl.property("Transform").property(axes[ax]); if (ap) ap.addKey(t); } catch(e) {}
+                }
+            } else {
+                try { nl.property("Transform").property("Position").addKey(t); } catch(e) {}
+            }
+        }
+        if (keysR) {
+            if (nl.threeDLayer) {
+                var rotProps = ["X Rotation", "Y Rotation", "Z Rotation"];
+                for (var rr = 0; rr < rotProps.length; rr++) {
+                    try { var rp = nl.property("Transform").property(rotProps[rr]); if (rp) rp.addKey(t); } catch(e) {}
+                }
+            } else {
+                try { nl.property("Transform").property("Rotation").addKey(t); } catch(e) {}
+            }
+        }
+        if (keysS) {
+            try { nl.property("Transform").property("Scale").addKey(t); } catch(e) {}
+        }
+    }
+
+    if (mt && targets.length > 0) {
+        for (var mtI = 0; mtI < targets.length; mtI++) {
+            var tgt = targets[mtI];
+            if (!tgt.hasVideo || tgt.nullLayer) continue;
+            try {
+                var fx = tgt.property("ADBE Effect Parade");
+                if (fx) {
+                    var has = false;
+                    for (var e2 = 1; e2 <= fx.numProperties; e2++) {
+                        try { if (fx.property(e2).matchName === "ADBE Tile") { has = true; break; } } catch(ex) {}
+                    }
+                    if (!has) fx.addProperty("ADBE Tile");
+                }
+            } catch(e) {}
+        }
+    }
+
+    selectOnlyCreated(comp, created);
+    app.endUndoGroup();
+}
+
+function createSolid(hex, w, h) {
+    var comp = isCompActive();
+    if (!comp) return alert("Click on the timeline first!");
+
+    var color = hexToRGB(hex);
+    var sel   = comp.selectedLayers;
+    var created = [];
+
+    app.beginUndoGroup("Create Solid");
+
+    if (sel.length === 0) {
+        var finalW = (w && w > 0) ? w : comp.width;
+        var finalH = (h && h > 0) ? h : comp.height;
+        created.push(comp.layers.addSolid(color, "Solid", finalW, finalH, 1));
+    } else {
+        for (var i = 0; i < sel.length; i++) {
+            var target = sel[i];
+            var finalW = (w && w > 0) ? w : comp.width;
+            var finalH = (h && h > 0) ? h : comp.height;
+            var s = comp.layers.addSolid(color, "Solid", finalW, finalH, 1);
+            s.moveBefore(target);
+            s.startTime = target.startTime;
+            s.inPoint   = target.inPoint;
+            s.outPoint  = target.outPoint;
+            created.push(s);
+        }
+    }
+
+    selectOnlyCreated(comp, created);
+    app.endUndoGroup();
+}
+
+function createAdjustment() {
+    var comp = isCompActive();
+    if (!comp) return alert("Please click on the timeline first!");
+
+    var originalSel = comp.selectedLayers;
+    var targets = [];
+    for (var i = 0; i < originalSel.length; i++) targets.push(originalSel[i]);
+
+    app.beginUndoGroup("Create Adjustment");
+    var created = [];
+
+    if (targets.length === 0) {
+        clearSelection(comp);
+        try { app.executeCommand(2279); } catch(e) { app.endUndoGroup(); return alert("executeCommand failed: " + e); }
+
+        var newSel = comp.selectedLayers;
+        if (newSel.length > 0) created.push(newSel[0]);
+    } else {
+        // Для каждого target — отдельно создаём adjustment над ним
+        for (var ti = 0; ti < targets.length; ti++) {
+            var target = targets[ti];
+
+            clearSelection(comp);
+            target.selected = true;
+
+            try { app.executeCommand(2279); } catch(e) {
+                app.endUndoGroup();
+                return alert("executeCommand failed: " + e);
+            }
+
+            var sel2 = comp.selectedLayers;
+            for (var s = 0; s < sel2.length; s++) {
+                if (sel2[s].adjustmentLayer && sel2[s] !== target) {
+                    var adj = sel2[s];
+                    // Подгоняем тайминг под target
+                    try { adj.inPoint  = target.inPoint;  } catch(e) {}
+                    try { adj.outPoint = target.outPoint; } catch(e) {}
+                    created.push(adj);
+                    break;
+                }
+            }
+        }
+    }
+
+    selectOnlyCreated(comp, created);
+    app.endUndoGroup();
+}
+
+function createCamera() {
+    var comp = isCompActive();
+    if (!comp) return alert("Please click on the timeline first!");
+
+    var sel = comp.selectedLayers;
+    var created = [];
+
+    app.beginUndoGroup("Create Camera");
+
+    if (sel.length === 0) {
+        created.push(comp.layers.addCamera("CAM", [comp.width/2, comp.height/2]));
+    } else {
+        for (var i = 0; i < sel.length; i++) {
+            var target = sel[i];
+            var camDist = 1500;
+            var c = comp.layers.addCamera("CAM_" + target.name, [comp.width/2, comp.height/2]);
+            c.inPoint  = target.inPoint;
+            c.outPoint = target.outPoint;
+            if (!target.threeDLayer) target.threeDLayer = true;
+            var tp = target.property("Position").value;
+            c.property("Position").setValue([tp[0], tp[1], tp[2] - camDist]);
+            if (c.property("Point of Interest")) c.property("Point of Interest").setValue(tp);
+            c.property("Zoom").setValue(camDist);
+            c.moveBefore(target);
+            created.push(c);
+        }
+    }
+
+    selectOnlyCreated(comp, created);
+    app.endUndoGroup();
+}

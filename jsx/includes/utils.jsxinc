@@ -1,0 +1,159 @@
+
+function isCompActive() {
+    var it = app.project.activeItem;
+    return (it && it instanceof CompItem) ? it : null;
+}
+
+function hexToRGB(hex) {
+    hex = hex.replace(/^#/, "");
+    if (hex.length === 3) hex = hex.split("").map(function(h){ return h+h; }).join("");
+    var bigint = parseInt(hex, 16);
+    return [((bigint >> 16) & 255)/255, ((bigint >> 8) & 255)/255, (bigint & 255)/255];
+}
+
+function selectOnlyCreated(comp, layersArray) {
+    for (var i = 1; i <= comp.numLayers; i++) comp.layer(i).selected = false;
+    for (var j = 0; j < layersArray.length; j++) {
+        if (layersArray[j]) layersArray[j].selected = true;
+    }
+}
+
+function clearSelection(comp) {
+    try { for (var i = 1; i <= comp.numLayers; i++) comp.layer(i).selected = false; } catch(e) {}
+}
+
+function setSafe(prop, val) {
+    try {
+        if (!prop) return;
+        if (prop.numKeys === 0) prop.setValue(val);
+    } catch(e) {}
+}
+
+function getWorldTransform(layer) {
+    var t = {};
+    try { t.position    = layer.transform.position.value;    } catch(e) {}
+    try { t.scale       = layer.transform.scale.value;       } catch(e) {}
+    try { t.rotation    = layer.transform.rotation.value;    } catch(e) {}
+    try { t.anchorPoint = layer.transform.anchorPoint.value; } catch(e) {}
+    try { t.opacity     = layer.transform.opacity.value;     } catch(e) {}
+    try { t.orientation = layer.transform.orientation.value; } catch(e) {}
+    try { t.xRotation   = layer.transform.xRotation.value;   } catch(e) {}
+    try { t.yRotation   = layer.transform.yRotation.value;   } catch(e) {}
+    return t;
+}
+
+function setWorldTransform(layer, t) {
+    try { if (t.position    !== undefined) layer.transform.position.setValue(t.position);       } catch(e) {}
+    try { if (t.scale       !== undefined) layer.transform.scale.setValue(t.scale);             } catch(e) {}
+    try { if (t.rotation    !== undefined) layer.transform.rotation.setValue(t.rotation);       } catch(e) {}
+    try { if (t.anchorPoint !== undefined) layer.transform.anchorPoint.setValue(t.anchorPoint); } catch(e) {}
+    try { if (t.opacity     !== undefined) layer.transform.opacity.setValue(t.opacity);         } catch(e) {}
+    try { if (t.orientation !== undefined) layer.transform.orientation.setValue(t.orientation); } catch(e) {}
+    try { if (t.xRotation   !== undefined) layer.transform.xRotation.setValue(t.xRotation);    } catch(e) {}
+    try { if (t.yRotation   !== undefined) layer.transform.yRotation.setValue(t.yRotation);    } catch(e) {}
+}
+
+function findLayerByName(comp, name) {
+    for (var i = 1; i <= comp.numLayers; i++) {
+        if (comp.layer(i).name === name) return comp.layer(i);
+    }
+    return null;
+}
+
+var SKIP_MATCH_NAMES = {
+    "ADBE Marker":          true,
+    "ADBE MaskAttr":        true,
+    "ADBE Mask Parade":     true,
+    "ADBE Transform Group": true
+};
+
+function shouldSkipProp(prop) {
+    try { if (SKIP_MATCH_NAMES[prop.matchName]) return true; } catch(e) {}
+    return false;
+}
+
+function collectPropertyValues(prop, store) {
+    try {
+        if (shouldSkipProp(prop)) { store.push({ skip: true }); return; }
+        if (prop.propertyType === PropertyType.PROPERTY) {
+            var entry = { matchName: prop.matchName, expressionEnabled: false,
+                          expression: "", value: null, isLayerRef: false, layerIndex: -1, skip: false };
+            try { if (prop.expressionEnabled) { entry.expressionEnabled = true; entry.expression = prop.expression; } } catch(e) {}
+            try {
+                if (prop.propertyValueType === PropertyValueType.LAYER_INDEX) {
+                    entry.isLayerRef = true; entry.layerIndex = prop.value;
+                } else { entry.value = prop.value; }
+            } catch(e) {}
+            store.push(entry);
+        } else {
+            store.push({ matchName: prop.matchName, isGroup: true, skip: false });
+            for (var i = 1; i <= prop.numProperties; i++) {
+                try { collectPropertyValues(prop.property(i), store); } catch(e) {}
+            }
+        }
+    } catch(e) {}
+}
+
+function restorePropertyValues(prop, store, cursor, innerIndexToNewLayer) {
+    try {
+        var entry = store[cursor[0]]; cursor[0]++;
+        if (!entry || entry.skip) return;
+        if (prop.propertyType === PropertyType.PROPERTY) {
+            if (entry.isLayerRef) {
+                try { if (entry.layerIndex > 0 && innerIndexToNewLayer[entry.layerIndex]) prop.setValue(innerIndexToNewLayer[entry.layerIndex].index); } catch(e) {}
+            } else {
+                try { if (entry.value !== null) prop.setValue(entry.value); } catch(e) {}
+            }
+            if (entry.expressionEnabled && entry.expression !== "") {
+                try {
+                    var expr = entry.expression;
+                    for (var oldIdx in innerIndexToNewLayer) {
+                        if (innerIndexToNewLayer.hasOwnProperty(oldIdx)) {
+                            var newIdx2 = innerIndexToNewLayer[oldIdx].index;
+                            var re = new RegExp("(\\.layer\\()(" + oldIdx + ")(\\))", "g");
+                            expr = expr.replace(re, "$1" + newIdx2 + "$3");
+                        }
+                    }
+                    prop.expressionEnabled = true; prop.expression = expr;
+                } catch(e) {}
+            }
+        } else {
+            for (var i = 1; i <= prop.numProperties; i++) {
+                try { restorePropertyValues(prop.property(i), store, cursor, innerIndexToNewLayer); } catch(e) {}
+            }
+        }
+    } catch(e) {}
+}
+
+function collectMarkers(layer) {
+    var markers = [];
+    try {
+        var mp = layer.property("Marker"); if (!mp) return markers;
+        for (var i = 1; i <= mp.numKeys; i++) {
+            try {
+                var mv = mp.keyValue(i);
+                markers.push({ time: mp.keyTime(i), comment: mv.comment, duration: mv.duration,
+                               chapter: mv.chapter, url: mv.url, label: mv.label, cuePointName: mv.cuePointName });
+            } catch(e) {}
+        }
+    } catch(e) {}
+    return markers;
+}
+
+function restoreMarkers(layer, markers) {
+    try {
+        var mp = layer.property("Marker"); if (!mp) return;
+        while (mp.numKeys > 0) { try { mp.removeKey(1); } catch(e) { break; } }
+        for (var i = 0; i < markers.length; i++) {
+            try {
+                var m = markers[i], mv = new MarkerValue(m.comment || "");
+                try { mv.duration = m.duration; } catch(e) {}
+                try { mv.chapter  = m.chapter;  } catch(e) {}
+                try { mv.url      = m.url;      } catch(e) {}
+                try { mv.label    = m.label;    } catch(e) {}
+                try { mv.cuePointName = m.cuePointName; } catch(e) {}
+                mp.setValueAtTime(m.time, mv);
+            } catch(e) {}
+        }
+    } catch(e) {}
+}
