@@ -86,7 +86,6 @@ function createNull(parentFlag, optsJSON) {
             }
 
             var rootOldParent = rootLayer.parent;
-─
             var nullLayer = comp.layers.addNull(comp.duration);
             nullLayer.name = "Null";
 

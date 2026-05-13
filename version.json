@@ -1,5 +1,5 @@
 {
-  "version": "1.0.6",
+  "version": "1.0.7",
   "message": "Fixed null reference error in some cases. Ty for reports) .",
   "url": "https://github.com/duskyffx/Fast-Layers/archive/refs/heads/main.zip"
 }
